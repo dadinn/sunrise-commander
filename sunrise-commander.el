@@ -469,6 +469,11 @@ the 'recursive' (-r) option."
 (defvar sr-prior-window-configuration nil
   "Window configuration before Sunrise was started.")
 
+(defcustom sr-show-viewer-on-start t
+  "Whether the viewer window should be shown when Sunrise starts."
+  :group 'sunrise
+  :type 'boolean)
+
 (defvar sr-running nil
   "True when Sunrise commander mode is running.")
 
@@ -1270,7 +1275,7 @@ these values uses the default, ie. $HOME."
         (setq sr-restore-buffer (current-buffer)
               sr-current-frame (window-frame (selected-window))
               sr-prior-window-configuration (current-window-configuration))
-        (sr-setup-windows)
+        (sr-setup-windows sr-show-viewer-on-start)
         (if filename
             (condition-case description
                 (sr-focus-filename (file-name-nondirectory filename))
@@ -1369,7 +1374,16 @@ buffer or window."
     (other-window 1)
     (sr-setup-pane right)))
 
-(defun sr-setup-windows()
+(defun sr-setup-viewer-window ()
+  "Set up the Sunrise quick viewer pane."
+  (unless (and sr-panes-height (< sr-panes-height (frame-height)))
+    (setq sr-panes-height (sr-get-panes-size)))
+  (if (and (<= sr-panes-height (* 2 window-min-height))
+	   (eq sr-window-split-style 'vertical))
+      (setq sr-panes-height (* 2 window-min-height)))
+  (split-window (selected-window) sr-panes-height))
+
+(defun sr-setup-windows(&optional show-viewer)
   "Set up the Sunrise window configuration (two windows in `sr-mode')."
   (run-hooks 'sr-init-hook)
   ;;get rid of all windows except one (not any of the panes!)
@@ -1378,15 +1392,7 @@ buffer or window."
   (if (buffer-live-p other-window-scroll-buffer)
       (switch-to-buffer other-window-scroll-buffer)
     (sr-switch-to-nonpane-buffer))
-
-  ;;now create the viewer window
-  (unless (and sr-panes-height (< sr-panes-height (frame-height)))
-    (setq sr-panes-height (sr-get-panes-size)))
-  (if (and (<= sr-panes-height (* 2 window-min-height))
-           (eq sr-window-split-style 'vertical))
-      (setq sr-panes-height (* 2 window-min-height)))
-  (split-window (selected-window) sr-panes-height)
-
+  (when show-viewer (sr-setup-viewer-window))
   (case sr-window-split-style
     (horizontal (split-window-horizontally))
     (vertical   (split-window-vertically))
@@ -2293,12 +2299,16 @@ pane, and on symlinks follows the file the link points to in the passive pane.
 With optional argument kills the last quickly viewed file without opening a new
 buffer."
   (interactive "P")
-  (if arg
-      (sr-quick-view-kill)
+  (cond
+   (arg
+    (sr-quick-view-kill)
+    (sr-setup-windows))
+   (t
+    (sr-setup-windows t)
     (let ((name (dired-get-filename nil t)))
       (cond ((file-directory-p name) (sr-quick-view-directory name))
-            ((file-symlink-p name) (sr-quick-view-symlink name))
-            (t (sr-quick-view-file))))))
+	    ((file-symlink-p name) (sr-quick-view-symlink name))
+	    (t (sr-quick-view-file)))))))
 
 (defun sr-quick-view-kill ()
   "Kill the last buffer opened using quick view (if any)."
